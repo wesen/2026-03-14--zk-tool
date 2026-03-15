@@ -15,6 +15,8 @@ topics:
       description: API surface and implementation planning
     - slug: bobatea
       description: Bobatea TUI and REPL integration
+    - slug: architecture
+      description: Architecture and design structure work
 docTypes:
     - slug: design-doc
       description: Structured rationale and architecture notes
