@@ -374,3 +374,102 @@ Files added in this step:
 - `/home/manuel/code/wesen/corporate-headquarters/go-go-goja/pkg/obsidianmd/tasks.go`
 - `/home/manuel/code/wesen/corporate-headquarters/go-go-goja/pkg/obsidianmd/note_builder.go`
 - `/home/manuel/code/wesen/corporate-headquarters/go-go-goja/pkg/obsidianmd/obsidianmd_test.go`
+
+## Step 4: Implement `pkg/obsidian` in `go-go-goja`
+
+With the transport and markdown helpers in place, I moved up one level and built the high-level client layer. This is the package that starts to mirror the source design more directly: it owns note resolution, lazy note objects, basic caching, query planning, and sequential batch execution. The key constraint here was to keep the package independent from goja so the future native module layer can stay thin.
+
+### Prompt Context
+
+**User prompt (verbatim):** "Create detailed and granular set of tasks to implement things. Then work on them one by one, committing as you go at appropriate intervals, keeping a detailed diary."
+
+**Assistant interpretation:** Continue with the next planned package boundary, keep the work reviewable, and document the real implementation/debugging path instead of only the successful end state.
+
+**Inferred user intent:** The user wants a bottom-up implementation with visible milestones: first the CLI substrate, then markdown semantics, then the higher-level Obsidian API, then the goja exposure and REPL integration.
+
+**Commit (code):** `d7a8dc1` (`feat(obsidian): add high-level Obsidian client layer`)
+
+### What I did
+
+- Added `pkg/obsidian/types.go` for client config, file/search/delete options, and batch result types.
+- Added `pkg/obsidian/cache.go` with a simple note-content cache.
+- Added `pkg/obsidian/client.go` with methods for version, files, search, read, create, append, prepend, move, rename, delete, note resolution, query creation, and cache invalidation.
+- Added `pkg/obsidian/note.go` with a lazy `Note` object that parses frontmatter, wikilinks, headings, tags, and tasks on first access.
+- Added `pkg/obsidian/query.go` with a small fluent query builder that distinguishes native CLI filters from content-based post-filters.
+- Added `pkg/obsidian/batch.go` for sequential batch execution with per-note result/error capture.
+- Added focused tests built around a fake CLI runner.
+- Ran focused tests, attempted the commit, fixed a lint issue and a zero-value query behavior bug, then re-ran the full hook pipeline successfully under `GOWORK=off`.
+
+### Why
+
+- This package is the first layer that actually embodies the source design rather than just supporting it.
+- The JS module should not need to understand vault file resolution or markdown parsing details. Those concerns belong here.
+- The package boundary gives future goja exports a stable host-language API to wrap.
+
+### What worked
+
+- The split between native filters and post-filters produced a clean query implementation.
+- The fake-runner test strategy was effective and kept the package fully unit-testable without requiring a live Obsidian process.
+- The lazy `Note` object reused the markdown package cleanly and made the API easier to reason about.
+
+### What didn't work
+
+- The first commit attempt failed lint because the switch over `queryMode` needed an explicit `queryModeFiles` case and one small helper was unused.
+- After fixing lint, focused tests exposed a real behavior bug: the zero-value query builder path defaulted to an unsupported empty mode rather than behaving like a normal file query.
+
+Exact failing behavior after the first lint fix:
+
+```text
+obsidian: unsupported query mode ""
+```
+
+- I fixed that by making `Client.Query()` initialize the mode explicitly and by defensive-normalizing an empty mode to `queryModeFiles` inside the query executor.
+
+### What I learned
+
+- The service layer is now strong enough that the future goja module should mostly be an adapter problem rather than a domain-logic problem.
+- Zero-value behavior matters in fluent APIs. It is easy to focus on the happy-path method chain and miss what happens when callers use the default constructor path.
+
+### What warrants a second pair of eyes
+
+- The friendly-reference resolution heuristics in `client.go`, especially around ambiguous note names in larger vaults.
+- The exact query-builder surface. It is intentionally small for this first cut, and should be checked against the full expectations from `DESIGN-obsidian-js-api.md` before the JS module hardens around it.
+- The cache scope. It currently caches note contents only, which is a safe starting point but not a final performance strategy.
+
+### Code review instructions
+
+- Review the new package:
+  - `/home/manuel/code/wesen/corporate-headquarters/go-go-goja/pkg/obsidian/types.go`
+  - `/home/manuel/code/wesen/corporate-headquarters/go-go-goja/pkg/obsidian/cache.go`
+  - `/home/manuel/code/wesen/corporate-headquarters/go-go-goja/pkg/obsidian/client.go`
+  - `/home/manuel/code/wesen/corporate-headquarters/go-go-goja/pkg/obsidian/note.go`
+  - `/home/manuel/code/wesen/corporate-headquarters/go-go-goja/pkg/obsidian/query.go`
+  - `/home/manuel/code/wesen/corporate-headquarters/go-go-goja/pkg/obsidian/batch.go`
+  - `/home/manuel/code/wesen/corporate-headquarters/go-go-goja/pkg/obsidian/client_test.go`
+- Run focused validation:
+  - `GOWORK=off go test ./pkg/obsidian`
+- Inspect the commit:
+  - `git show --stat d7a8dc1`
+
+### Technical details
+
+Commands run during this step:
+
+```bash
+git status --short
+rg -n "obs\\.|query|batch|note\\(" DESIGN-obsidian-js-api.md
+gofmt -w pkg/obsidian/*.go
+GOWORK=off go test ./pkg/obsidian
+git add pkg/obsidian
+GOWORK=off git commit -m "feat(obsidian): add high-level Obsidian client layer"
+```
+
+Files added in this step:
+
+- `/home/manuel/code/wesen/corporate-headquarters/go-go-goja/pkg/obsidian/types.go`
+- `/home/manuel/code/wesen/corporate-headquarters/go-go-goja/pkg/obsidian/cache.go`
+- `/home/manuel/code/wesen/corporate-headquarters/go-go-goja/pkg/obsidian/client.go`
+- `/home/manuel/code/wesen/corporate-headquarters/go-go-goja/pkg/obsidian/note.go`
+- `/home/manuel/code/wesen/corporate-headquarters/go-go-goja/pkg/obsidian/query.go`
+- `/home/manuel/code/wesen/corporate-headquarters/go-go-goja/pkg/obsidian/batch.go`
+- `/home/manuel/code/wesen/corporate-headquarters/go-go-goja/pkg/obsidian/client_test.go`

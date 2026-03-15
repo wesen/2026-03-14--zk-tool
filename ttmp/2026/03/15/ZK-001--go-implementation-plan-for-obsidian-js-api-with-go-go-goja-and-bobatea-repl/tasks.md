@@ -36,15 +36,15 @@
 
 ## Phase 3: `pkg/obsidian`
 
-- [ ] Add `pkg/obsidian/types.go` with note/query/batch/config types
-- [ ] Add `pkg/obsidian/client.go` with low-level methods backed by `pkg/obsidiancli`
-- [ ] Add `pkg/obsidian/note.go` with lazy loading and cache invalidation
-- [ ] Add `pkg/obsidian/query.go` with native-filter vs post-filter planning
-- [ ] Add `pkg/obsidian/batch.go` with sequential default execution
-- [ ] Add `pkg/obsidian/cache.go`
-- [ ] Add client/query/note tests using a fake CLI runner
-- [ ] Run focused tests for `pkg/obsidian`
-- [ ] Commit the `pkg/obsidian` slice in `go-go-goja`
+- [x] Add `pkg/obsidian/types.go` with note/query/batch/config types
+- [x] Add `pkg/obsidian/client.go` with low-level methods backed by `pkg/obsidiancli`
+- [x] Add `pkg/obsidian/note.go` with lazy loading and cache invalidation
+- [x] Add `pkg/obsidian/query.go` with native-filter vs post-filter planning
+- [x] Add `pkg/obsidian/batch.go` with sequential default execution
+- [x] Add `pkg/obsidian/cache.go`
+- [x] Add client/query/note tests using a fake CLI runner
+- [x] Run focused tests for `pkg/obsidian`
+- [x] Commit the `pkg/obsidian` slice in `go-go-goja` (`d7a8dc1`)
 
 ## Phase 4: `modules/obsidian`
 
