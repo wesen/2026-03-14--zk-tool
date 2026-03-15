@@ -34,8 +34,8 @@ ExternalSources:
     - https://help.obsidian.md/cli
     - https://github.com/kitschpatrol/obsidian-ts
 Summary: |
-    Chronological record of creating the ZK-001 ticket, initializing docmgr in this repository, collecting file-backed evidence from the source design and target Go repos, writing the intern-oriented implementation guide, and implementing the first committed slices in `go-go-goja`.
-LastUpdated: 2026-03-15T15:56:00-04:00
+    Chronological record of creating the ZK-001 ticket, initializing docmgr in this repository, collecting file-backed evidence from the source design and target Go repos, writing the intern-oriented implementation guide, and implementing the first five committed slices in `go-go-goja`.
+LastUpdated: 2026-03-15T16:16:00-04:00
 WhatFor: |
     Use this to understand how the documentation ticket was assembled, what commands were run, what failed, and what evidence informed the design decisions.
 WhenToUse: Use this when continuing the ticket later, validating the deliverable, or reviewing whether the documentation work followed the requested workflow.
@@ -473,3 +473,191 @@ Files added in this step:
 - `/home/manuel/code/wesen/corporate-headquarters/go-go-goja/pkg/obsidian/query.go`
 - `/home/manuel/code/wesen/corporate-headquarters/go-go-goja/pkg/obsidian/batch.go`
 - `/home/manuel/code/wesen/corporate-headquarters/go-go-goja/pkg/obsidian/client_test.go`
+
+## Step 5: Implement `modules/obsidian` in `go-go-goja`
+
+With the host-language client in place, I added the goja-native module adapter. This is the slice that exposes the work to JavaScript through `require("obsidian")`. The module returns Promises for the user-facing async surface, exports a fluent query builder object, and exposes a small `md` namespace that forwards the markdown helpers from `pkg/obsidianmd`.
+
+### Prompt Context
+
+**User prompt (verbatim):** "Create detailed and granular set of tasks to implement things. Then work on them one by one, committing as you go at appropriate intervals, keeping a detailed diary."
+
+**Assistant interpretation:** Move from the pure Go service layer to the JS bridge, keep the adapter thin over the existing `pkg/obsidian` logic, and add real runtime tests instead of only unit tests.
+
+**Inferred user intent:** The JavaScript API should become concretely usable inside `go-go-goja`, not remain a design-only abstraction.
+
+**Commit (code):** `4faf260` (`feat(obsidian): add goja native module`)
+
+### What I did
+
+- Read the `go-go-goja-module-authoring` skill and existing native module patterns to align the adapter style with the repo.
+- Added `modules/obsidian/module.go` with:
+  - `configure`, `version`, `files`, `read`, `create`, `append`, `prepend`, `move`, `rename`, `delete`, `note`, `query`, `batch`, and `exec`
+  - an `md` namespace for frontmatter, wikilinks, headings, tags, tasks, and note-building helpers
+  - Promise-returning exports over the `pkg/obsidian` client
+  - a fluent JS query object with `.inFolder()`, `.withExtension()`, `.search()`, `.nameContains()`, `.tagged()`, `.limit()`, `.orphans()`, `.deadEnds()`, `.unresolved()`, and `.run()`
+- Added runtime integration tests for:
+  - Promise fulfillment
+  - Promise rejection
+  - fluent query chaining
+- Added a blank import in `engine/runtime.go` so the module participates in default registry enablement.
+- Fixed the module test package structure to avoid an import cycle with the engine blank import.
+- Fixed a factory-lifecycle detail in the tests where the runner factory is called once with default config before `configure()` rebuilds the client with the final vault settings.
+
+### Why
+
+- The adapter had to stay thin and reuse `pkg/obsidian` so the JavaScript API and the Go API do not drift.
+- Runtime integration tests matter here because the most important behavior is the JS-facing contract, not just the host-language logic.
+- Registering the module in the default registry makes it available to the existing evaluator/runtime composition path.
+
+### What worked
+
+- The query-builder object mapped cleanly onto the Go `Query` type.
+- Promise fulfillment/rejection tests were enough to validate the adapter contract without needing a live Obsidian process.
+- The `md` namespace was straightforward because the pure markdown package was already isolated.
+
+### What didn't work
+
+- The initial same-package integration tests produced an import cycle because `engine/runtime.go` now blank-imports `modules/obsidian`, and the tests also imported `engine`.
+- I fixed that by moving the tests to the external `obsidianmod_test` package.
+
+- The original module plan assumed the loader could discover the runtime event loop directly and create a `runtimeowner.Runner` on demand. That was wrong for this codebase's actual `NativeModule.Loader` surface.
+
+### What I learned
+
+- `NativeModule.Loader` is intentionally narrow: it gets `*goja.Runtime` and `module.exports`, but not the engine runtime context or event loop handle. That limits what a self-registering default module can do for owner-thread async settlement without extra wiring.
+- The right compromise for this phase was:
+  - use `runtimeowner.Runner` when an owner is explicitly injected through module options
+  - otherwise settle Promises synchronously on the VM thread for the current blocking operations
+
+That preserves a Promise-shaped JS API now without inventing unsafe cross-goroutine VM access.
+
+### What warrants a second pair of eyes
+
+- Whether the long-term runtime composition should add a first-class path for runtime-scoped module dependencies like `runtimeowner.Runner`, rather than relying on adapter-local fallbacks.
+- The exact shape of `batch()` and whether it should stay mapper-based or evolve into something closer to the richer source design later.
+
+### Code review instructions
+
+- Review the adapter and tests:
+  - `/home/manuel/code/wesen/corporate-headquarters/go-go-goja/modules/obsidian/module.go`
+  - `/home/manuel/code/wesen/corporate-headquarters/go-go-goja/modules/obsidian/module_test.go`
+  - `/home/manuel/code/wesen/corporate-headquarters/go-go-goja/engine/runtime.go`
+- Run focused validation:
+  - `GOWORK=off go test ./modules/obsidian`
+  - `GOWORK=off go test ./engine ./modules/obsidian ./pkg/repl/evaluators/javascript`
+- Inspect the commit:
+  - `git show --stat 4faf260`
+
+### Technical details
+
+Commands run during this step:
+
+```bash
+sed -n '1,260p' /home/manuel/.codex/skills/go-go-goja-module-authoring/SKILL.md
+sed -n '1,260p' modules/common.go
+sed -n '1,260p' modules/exec/exec.go
+sed -n '1,260p' modules/database/database.go
+sed -n '1,260p' engine/module_specs.go
+sed -n '1,260p' pkg/doc/03-async-patterns.md
+gofmt -w modules/obsidian/*.go engine/runtime.go
+GOWORK=off go test ./modules/obsidian
+GOWORK=off go test ./engine ./modules/obsidian ./pkg/repl/evaluators/javascript
+git add modules/obsidian engine/runtime.go
+GOWORK=off git commit -m "feat(obsidian): add goja native module"
+```
+
+Files added in this step:
+
+- `/home/manuel/code/wesen/corporate-headquarters/go-go-goja/modules/obsidian/module.go`
+- `/home/manuel/code/wesen/corporate-headquarters/go-go-goja/modules/obsidian/module_test.go`
+
+Files updated in this step:
+
+- `/home/manuel/code/wesen/corporate-headquarters/go-go-goja/engine/runtime.go`
+
+## Step 6: Improve evaluator Promise handling and top-level `await`
+
+After the module landed, the main usability gap moved back to the REPL evaluator. The existing evaluator executed code with `runtime.RunString(code)` and immediately stringified the result. That meant returned Promises rendered as Promise objects instead of settling into the final transcript value, and raw `await obs.files()` syntax still failed because the input was not treated as top-level await.
+
+### Prompt Context
+
+**User prompt (verbatim):** "Create detailed and granular set of tasks to implement things. Then work on them one by one, committing as you go at appropriate intervals, keeping a detailed diary."
+
+**Assistant interpretation:** Continue to the next planned slice that unlocks the JS ergonomics promised by the design, but keep the scope contained enough to land safely.
+
+**Inferred user intent:** Make the REPL actually pleasant for the intended `obsidian` module usage instead of requiring users to inspect raw Promise objects or hand-wrap async code.
+
+**Commit (code):** `8d7ab9d` (`feat(repl): settle promise results and support top-level await expressions`)
+
+### What I did
+
+- Updated `pkg/repl/evaluators/javascript/evaluator.go` so evaluation uses the owned runtime runner when available.
+- Added Promise-result detection and a polling wait path that reads Promise state/result on the runtime owner thread until fulfillment or rejection.
+- Added rejection rendering so rejected Promises surface as evaluator errors instead of opaque Promise objects.
+- Added a narrow top-level await strategy:
+  - if the input is an expression starting with `await `
+  - wrap it as an async IIFE
+  - wait for the resulting Promise
+- Added evaluator tests covering:
+  - fulfilled Promise output
+  - rejected Promise errors
+  - expression-style top-level await
+- Fixed lint-driven exhaustiveness issues in the Promise-state switches before the final commit.
+
+### Why
+
+- This was the smallest evaluator change that materially improves the intended Obsidian workflow.
+- A full Node-style top-level-await parser/rewriter would be much riskier and would interfere with declaration persistence in the REPL.
+- Expression-style await is the common ergonomic case for `await obs.files()`, `await obs.read(...)`, and `await obs.query().run()`.
+
+### What worked
+
+- Native JS Promise tests were enough to validate the settlement path without depending on the Obsidian CLI.
+- Routing evaluation and Promise inspection through the owned runtime runner kept the implementation aligned with the repo's owner-thread rules.
+- The expression-style await rewrite was small, easy to test, and did not change the normal non-await evaluation path.
+
+### What didn't work
+
+- The first commit attempt failed lint because `golangci-lint` requires exhaustive Promise-state switching, so implicit/default handling was not accepted.
+- I fixed that by enumerating the Promise states explicitly and reran the commit.
+
+### What I learned
+
+- The right Phase 5 scope is not "support arbitrary top-level await syntax." The right scope is "support the dominant REPL use case while preserving the existing evaluator model."
+- Even narrow async ergonomics changes are much easier once the runtime already has an owner-thread abstraction (`runtimeowner.Runner`).
+
+### What warrants a second pair of eyes
+
+- Whether the top-level await rewrite should expand beyond expression-style inputs in Phase 6 or later.
+- Whether Promise waiting should eventually support configurable timeout behavior for long-running async operations in the REPL.
+
+### Code review instructions
+
+- Review the evaluator changes:
+  - `/home/manuel/code/wesen/corporate-headquarters/go-go-goja/pkg/repl/evaluators/javascript/evaluator.go`
+  - `/home/manuel/code/wesen/corporate-headquarters/go-go-goja/pkg/repl/evaluators/javascript/evaluator_test.go`
+- Run focused validation:
+  - `GOWORK=off go test ./pkg/repl/evaluators/javascript`
+  - `GOWORK=off go test ./modules/obsidian ./pkg/repl/evaluators/javascript ./pkg/repl/adapters/bobatea`
+- Inspect the commit:
+  - `git show --stat 8d7ab9d`
+
+### Technical details
+
+Commands run during this step:
+
+```bash
+sed -n '1,260p' pkg/repl/evaluators/javascript/evaluator.go
+rg -n "Promise|await|Evaluate|RunString|transcript" pkg/repl/evaluators/javascript -S
+gofmt -w pkg/repl/evaluators/javascript/evaluator.go pkg/repl/evaluators/javascript/evaluator_test.go
+GOWORK=off go test ./pkg/repl/evaluators/javascript -count=1
+GOWORK=off go test ./modules/obsidian ./pkg/repl/evaluators/javascript ./pkg/repl/adapters/bobatea
+git add pkg/repl/evaluators/javascript/evaluator.go pkg/repl/evaluators/javascript/evaluator_test.go
+GOWORK=off git commit -m "feat(repl): settle promise results and support top-level await expressions"
+```
+
+Files updated in this step:
+
+- `/home/manuel/code/wesen/corporate-headquarters/go-go-goja/pkg/repl/evaluators/javascript/evaluator.go`
+- `/home/manuel/code/wesen/corporate-headquarters/go-go-goja/pkg/repl/evaluators/javascript/evaluator_test.go`

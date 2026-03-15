@@ -48,20 +48,20 @@
 
 ## Phase 4: `modules/obsidian`
 
-- [ ] Add `modules/obsidian/module.go` and register the native module
-- [ ] Export `configure`, `version`, `files`, `read`, `create`, `append`, `prepend`, `move`, `rename`, `delete`, `note`, `query`, `batch`, `exec`
-- [ ] Export `md` namespace from `pkg/obsidianmd`
-- [ ] Use `runtimeowner.Runner` for Promise settlement
-- [ ] Add JS-facing tests for Promise resolution/rejection and fluent query chaining
-- [ ] Run focused tests for `modules/obsidian` and the JS evaluator
-- [ ] Commit the `modules/obsidian` slice in `go-go-goja`
+- [x] Add `modules/obsidian/module.go` and register the native module
+- [x] Export `configure`, `version`, `files`, `read`, `create`, `append`, `prepend`, `move`, `rename`, `delete`, `note`, `query`, `batch`, `exec`
+- [x] Export `md` namespace from `pkg/obsidianmd`
+- [x] Use `runtimeowner.Runner` for Promise settlement when an owner is injected; fall back to synchronous settlement otherwise
+- [x] Add JS-facing tests for Promise resolution/rejection and fluent query chaining
+- [x] Run focused tests for `modules/obsidian` and the JS evaluator
+- [x] Commit the `modules/obsidian` slice in `go-go-goja` (`4faf260`)
 
 ## Phase 5: Evaluator And REPL Runtime Behavior
 
-- [ ] Extend the JS evaluator so Promise-returning expressions can settle into transcript output
-- [ ] Decide and implement top-level `await` handling strategy for REPL input
-- [ ] Add evaluator tests for Promise settlement and async error rendering
-- [ ] Commit evaluator/runtime updates in `go-go-goja`
+- [x] Extend the JS evaluator so Promise-returning expressions can settle into transcript output
+- [x] Decide and implement expression-style top-level `await` handling strategy for REPL input
+- [x] Add evaluator tests for Promise settlement and async error rendering
+- [x] Commit evaluator/runtime updates in `go-go-goja` (`8d7ab9d`)
 
 ## Phase 6: Dedicated Obsidian REPL
 
